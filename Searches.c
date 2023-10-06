@@ -18,6 +18,8 @@ Node* node_createNode(void* data)
     return node;
 }
 
+// The following is a node with a score for the 
+// priority queue, its mostly the same
 typedef struct pnode PNode;
 typedef struct pnode{
     void *data;
@@ -66,6 +68,10 @@ Node* queue_dequeue(Queue* queue)
     return temp;
 }
 
+/// @brief a function to check if a specific data value is in the queue
+/// @param queue the queue you want to search
+/// @param data the data you want to search for
+/// @return a bool indicating if the data is in the queue
 bool queue_inqueue(Queue* queue, void* data)
 {
     Node* activeNode = queue->head;
@@ -78,7 +84,7 @@ bool queue_inqueue(Queue* queue, void* data)
 }
 #pragma endregion
 
-#pragma region /* A simple queue implementation */
+#pragma region /* A simple priority queue implementation */
 typedef struct pqueue{
     PNode* head;
 } PQueue;
@@ -112,6 +118,10 @@ PNode* pqueue_dequeue(PQueue* pqueue)
     return temp;
 }
 
+/// @brief a function to check if a specific data value is in the queue
+/// @param Pqueue the queue you want to search
+/// @param data the data you want to search for
+/// @return a bool indicating if the data is in the queue
 bool pqueue_inqueue(PQueue* pqueue, void* data)
 {
     PNode* activeNode = pqueue->head;
@@ -124,6 +134,11 @@ bool pqueue_inqueue(PQueue* pqueue, void* data)
     return false;
 }
 
+/// @brief a function to return a Node with a matching piece of data
+/// @param pqueue the queue you want to search
+/// @param city the data you want to match against
+/// @return a PNode with data matching the provided data, priority
+///         should not be modified unless reinserted with replaceSpecific
 PNode* pqueue_findInQueue(PQueue *pqueue, void* city)
 {
     PNode* activeNode = pqueue->head;
@@ -136,6 +151,11 @@ PNode* pqueue_findInQueue(PQueue *pqueue, void* city)
     return NULL;
 }
 
+/// @brief The same as findInQueue except it returns a pointer to the parent of the matched item
+/// @param pqueue the queue you want to search
+/// @param city the data you want to match against
+/// @return a PNode with next->data matching the provided data, priority
+///         should not be modified unless reinserted with replaceSpecific
 PNode** pqueue_findInQueueParent(PQueue *pqueue, void* city)
 {
     PNode **activeNodePtr = &pqueue->head;
@@ -150,6 +170,10 @@ PNode** pqueue_findInQueueParent(PQueue *pqueue, void* city)
     return NULL;
 }
 
+/// @brief Changes the score of a Node in the priority queue with matching data
+/// @param pqueue the queue you want to search
+/// @param city the data you want to match against
+/// @param new_score the new score you want to assign
 void pqueue_replaceSpecific(PQueue *pqueue, void* city, uint32_t new_score)
 {
     PNode** nodeToBeChanged = pqueue_findInQueueParent(pqueue, city);
@@ -491,9 +515,12 @@ City** AStar(City* start, City* end)
             uint32_t new_score = \
                 currentNode->score - ((City*)currentNode->data)->straight_distance + currentCity->connections[i]->distance + currentCity->straight_distance;
 
+            // Check if the target city is already in the priority queue
             PNode* temp_node = pqueue_findInQueue(&pqueue, connected_city);
             if(temp_node != NULL)
             {
+                // if the target city is in the queue already we should modify
+                // that rather than add a new entry to the queue
                 if(temp_node->score > new_score)
                 {
                     //replace the node representing connected_city a node of different score
@@ -502,6 +529,7 @@ City** AStar(City* start, City* end)
                     connected_city->visited.addedBy = currentCity;
                 }
             }
+            // if the target city isnt in the queue already we should add it
             else
             {
                 if(connected_city->visited.addedBy != NULL)continue;
@@ -518,15 +546,32 @@ City** AStar(City* start, City* end)
 }
 #pragma endregion
 
+
+int costCalc(City* a, City* b)
+{
+    uint32_t num_connections = nullTermArrLen((void**)a->connections);
+    for(int i = 0; i < num_connections; i++)
+    {
+        if(a->connections[i]->connected_city == b)return a->connections[i]->distance;
+    }
+}
+
+// This is a function to run the algorithms with given cities
 typedef City** Algo(City*, City*);
 void RunAlgo(City* start, City* end, Algo func, City** arr, uint32_t size)
 {
     City** buf = func(start, end);
-    printf("\n\n%s to %s\n", start->name, end->name);
-    for(int i = 0; i < nullTermArrLen((void**)buf); i++)
+    uint32_t cost = 0, buf_len = nullTermArrLen((void**)buf);
+
+
+    printf("\n%s to %s\n", start->name, end->name);
+    for(int i = 0; i < buf_len; i++)
     {
-        printf("%s %d\n", buf[i]->name, buf[i]->straight_distance);
+        printf("%s - Running Cost: %d\n", buf[i]->name, cost);
+        if(i + 1 != buf_len)cost += costCalc(buf[i], buf[i+1]);
     }
+    printf("Total Cost: %d\n", cost);
+
     free(buf);
     resetCities(arr, size);
 }
@@ -605,3 +650,112 @@ int main()
     RunAlgo("Timisoara", "Bucharest", AStar);
     RunAlgo("Neamt", "Bucharest", AStar);
 }
+
+/*
+Paths:
+Breadth First Paths
+
+    Oradea to Bucharest
+    Oradea - Running Cost: 0
+    Sibiu - Running Cost: 151
+    Fagaras - Running Cost: 250
+    Bucharest - Running Cost: 461
+    Total Cost: 461
+
+    Timisoara to Bucharest
+    Timisoara - Running Cost: 0
+    Arad - Running Cost: 118
+    Sibiu - Running Cost: 258
+    Fagaras - Running Cost: 357
+    Bucharest - Running Cost: 568
+    Total Cost: 568
+
+    Neamt to Bucharest
+    Neamt - Running Cost: 0
+    Iasi - Running Cost: 87
+    Vaslui - Running Cost: 179
+    Urziceni - Running Cost: 321
+    Bucharest - Running Cost: 406
+    Total Cost: 406
+
+Depth First Paths
+
+    Oradea to Bucharest
+    Oradea - Running Cost: 0
+    Sibiu - Running Cost: 151
+    Rimnicu Vilcea - Running Cost: 231
+    Pitesti - Running Cost: 328
+    Bucharest - Running Cost: 429
+    Total Cost: 429
+
+    Timisoara to Bucharest
+    Timisoara - Running Cost: 0
+    Lugoj - Running Cost: 111
+    Mehadia - Running Cost: 181
+    Drobeta - Running Cost: 256
+    Craiova - Running Cost: 376
+    Pitesti - Running Cost: 514
+    Bucharest - Running Cost: 615
+    Total Cost: 615
+
+    Neamt to Bucharest
+    Neamt - Running Cost: 0
+    Iasi - Running Cost: 87
+    Vaslui - Running Cost: 179
+    Urziceni - Running Cost: 321
+    Bucharest - Running Cost: 406
+    Total Cost: 406
+
+AStar Paths
+
+    Oradea to Bucharest
+    Oradea - Running Cost: 0
+    Sibiu - Running Cost: 151
+    Rimnicu Vilcea - Running Cost: 231
+    Pitesti - Running Cost: 328
+    Bucharest - Running Cost: 429
+    Total Cost: 429
+
+    Timisoara to Bucharest
+    Timisoara - Running Cost: 0
+    Arad - Running Cost: 118
+    Sibiu - Running Cost: 258
+    Rimnicu Vilcea - Running Cost: 338
+    Pitesti - Running Cost: 435
+    Bucharest - Running Cost: 536
+    Total Cost: 536
+
+    Neamt to Bucharest
+    Neamt - Running Cost: 0
+    Iasi - Running Cost: 87
+    Vaslui - Running Cost: 179
+    Urziceni - Running Cost: 321
+    Bucharest - Running Cost: 406
+    Total Cost: 406
+
+Discussion of correctness:
+
+    After some analysis of the results of the independent runs of the search algorithms
+    it would be fair to say that they appear to be doing what they are intended for.
+    
+    The breadth first algorithm searches in a flood fill from the start which can be observerd
+    by the fact that the final path traces the order the cities were connected in the hard coding
+    of the connections at the beginning of main.
+
+    Similar can be said of depth first, except it takes a more roundabout (and ultimately longer)
+    path to get to its final destination
+
+    As expected A* is consistently the best algorithm and always found the shortest path between the 
+    start and end cities
+
+Discussion of efficiency:
+    The two most efficient algorithms of this assignement were likely the breadth and depth first searches.
+    The fact that they are implemented using your typical queue structures means that their data accesses
+    were O(1) whereas the priority queue of the A* algorithm only has an O(log(n)). In these small systems
+    with few nodes its likely that the benefits of the A* algorithm could never be noticed especially in 
+    comparison to the depth and breadth first searches which are guaranteed to only visit each node once.
+    However in larger systems the benefit of the A* algorithm (an informed approach) can not be understated.
+    The ability to completely ignore many nodes of a network because of a more complex heuristic approach
+    saves many many accesses to extraneous nodes thus massively reducing the computational impact and the
+    memory footprint of the search.
+*/
