@@ -4,22 +4,132 @@
 #include <string.h>
 #include <stdbool.h>
 
+//-------------------------
+// A generic singly linked node implementation
+typedef struct node Node;
+typedef struct node{
+    void *data;
+    Node *next;
+} Node;
+
+Node* createNode(void* data)
+{
+    Node* node = (Node*)calloc(1, sizeof(Node));
+    node->data = data;
+    return node;
+}
+//-------------------------
+
+
+//-------------------------
+// Simple queue implementation
+typedef struct queue{
+    Node* head;
+    Node* tail;
+} Queue;
+
+void enqueue(Queue* queue, Node* node)
+{
+    if(!queue->tail)
+    {
+        queue->head = node;
+        queue->tail = node;
+    }
+    else
+    {
+        queue->tail->next = node;
+        queue->tail = node;
+    } 
+}
+
+Node* dequeue(Queue* queue)
+{
+    if(queue->head == NULL)return NULL;
+
+    Node *temp = queue->head;
+
+    queue->head = queue->head->next;
+    if(queue->head == NULL)queue->tail = NULL;
+    
+    return temp;
+}
+
+bool inqueue(Queue* queue, void* data)
+{
+    Node* activeNode = queue->head;
+    while(activeNode)
+    {
+        if(activeNode->data == data)return true;
+        activeNode = activeNode->next;
+    }
+    return false;
+}
+//-------------------------
+
+
+//-------------------------
+// simple stack implementation
+typedef struct stack{
+    Node* head;
+    uint32_t size;
+} Stack;
+
+void push(Stack* stack, Node* node)
+{
+    if(stack->head == NULL)
+    {
+        stack->head = node;
+    }
+    else
+    {
+        node->next = stack->head;
+        stack->head = node;
+    }
+    stack->size++;
+}
+
+Node* pop(Stack* stack)
+{
+    if(stack->head == NULL)
+        return NULL;
+    else
+    {
+        Node* temp = stack->head;
+        stack->head = temp->next;
+        stack->size--;
+        return temp;
+    }
+}
+//-------------------------
+
 typedef struct connection Connection;
 typedef struct city City;
 
+// a struct representing a connection
 struct connection{
-    uint16_t distance;
-    City* connected_city;
+    uint16_t distance; // the length of the connection
+    City* connected_city; // the city the connection is connecting to
 };
 
+/// @brief a struct to store data about a city
 struct city
 {
-    char* name;
-    uint16_t straight_distance;
-    bool visited;
-    Connection* connections[5];
+    char* name; // the name of the city
+    uint16_t straight_distance; // the straight distance to bucharest
+    union {
+        bool visited;
+        City* addedBy;
+    } visited; 
+    // storage that indicates whether the city has been visited
+    // and can also store what city added it to the path
+
+    Connection* connections[5]; // a list of the connections to the city
 };
 
+/// @brief adds a connection to a city
+/// @param src_city one of two cities that should be connected
+/// @param dest_city one of two cities that should be connected
+/// @param dist the distance of the connection
 void addConnection(City* src_city, City* dest_city, uint32_t dist)
 {
     Connection** connections = src_city->connections;
@@ -35,6 +145,10 @@ void addConnection(City* src_city, City* dest_city, uint32_t dist)
     (*connections)->connected_city = dest_city;
 }
 
+/// @brief an initializer function for a city struct
+/// @param name the name of the city
+/// @param dist the straight distance to Bucharest
+/// @return a city struct with the given data
 City* createCity(char* name, uint16_t dist)
 {
     City* res = (City*)calloc(1, sizeof(City));
@@ -48,6 +162,11 @@ City* createCity(char* name, uint16_t dist)
     return res;
 }
 
+/// @brief a function to search an array for a city of a specific name
+/// @param name name of the target city 
+/// @param city_list a list of cities
+/// @param list_len the length of the list of cities
+/// @return a pointer to the city
 City* getCity(char* name, City* city_list[], uint32_t list_len)
 {
     for(int i = 0; i < list_len; i++)
@@ -59,20 +178,114 @@ City* getCity(char* name, City* city_list[], uint32_t list_len)
     exit(1);
 }
 
-City* breadthFirst(City* start, City* end, uint32_t max_path_len)
+/// @brief iterates through an array of pointers and finds the index of the first null pointer
+/// @param arr the array you want to find the length of
+/// @return the length of the array
+uint32_t nullTermArrLen(void *arr[])
 {
-    City** path = calloc(max_path_len, sizeof(City*));
-    if(path == NULL)
+    uint32_t count = 0;
+    for(int i = 0; true; i++)
     {
-        perror("Could not alloc space for path in breadth first");
-        exit(0);
+        if((void*)arr[i] == NULL)return i;
     }
-    path[0] = start;
 }
 
+/// @brief walks cities by their 'addedBy' property to create
+///        a list of cities representing a path from start to finish
+/// @param end a pointer the the last city in a path
+/// @return an array of City* in order of pathing from start to finish
+City** walkBack(City* start, City* end)
+{
+    
+    Stack stack = {0};
+    push(&stack, createNode(end));
+
+    // loop until you traced your steps back to the start of the path
+    while(end != start)
+    {
+        // push each visited city onto a stack in reverse order they were visited
+        push(&stack, createNode(end->visited.addedBy));
+        
+        // walk backwards along the path to trace it
+        end = end->visited.addedBy;
+    }
+    
+    // allocate memory for a list of cities
+    City** path = (City**)calloc(stack.size + 1, sizeof(City*));
+    if(!path)
+    {
+        perror("unable to calloc in walkback");
+        exit(0);
+    }
+
+    // pop cities off the stack to get them in the correct order
+    // and add them to the list as they get popped
+    for(int i = 0; stack.size > 0; i++)
+    {
+        path[i] = (City*)pop(&stack)->data;
+    }
+    
+    return path;
+}
+
+/// @brief Breadth first search of a graph
+/// @param start a pointer to the city you wish to start at
+/// @param end a pointer to the city you wish to end at
+/// @return a list of cities in the order of the path found
+City** breadthFirst(City* start, City* end)
+{
+    // Set up a queue structure for the search process
+    Queue queue = {NULL, NULL};
+    Node* currentNode = NULL;
+
+    // enque the start city
+    enqueue(&queue, createNode((void*)start));
+
+    // loop until there are no more cities in the queue
+    // (which will only happen if the target cant be found)
+    while(currentNode = dequeue(&queue))
+    {
+        City* currentCity = (City*)currentNode->data;
+
+        // if we have dequeued the target city from the queue
+        // we have reached our destination and should walk back
+        // through the queueing process to trace our path to the
+        // destination
+        if(currentCity == end) 
+            return walkBack(start, currentCity);
+
+        // we get the number of connections in the current 
+        // cities connections array
+        uint32_t connections_arr_len = \
+            nullTermArrLen((void**)(currentCity)->connections);
+
+        // loop over each connection and queue the connected city
+        for(int i = 0; i < connections_arr_len; i++)
+        {
+            City* connected_city = \
+                currentCity->connections[i]->connected_city;
+            
+            // if the city to be added is the starting city 
+            // or has already been visited skip it
+            if(connected_city->visited.addedBy != NULL || connected_city == start)continue;
+
+            // set the city as "visited" by storing a reference to the city that added it
+            connected_city->visited.addedBy = currentCity;
+
+            // queue the connected city
+            enqueue(&queue, createNode(connected_city));
+        }
+        // free the node we no longer need it once its been dequeued
+        free(currentNode);
+    }
+
+    return NULL;
+}
+
+//TODO: Implement
 City* depthFirst(City* start, City* end, uint32_t max_path_len)
 {
-    City** path = calloc(max_path_len, sizeof(City*));
+    City** path = (City**)calloc(max_path_len, sizeof(City*));
     if(path == NULL)
     {
         perror("Could not alloc space for path in depth first");
@@ -81,9 +294,10 @@ City* depthFirst(City* start, City* end, uint32_t max_path_len)
     path[0] = start;
 }
 
+//TODO: Implement
 City* AStar(City* start, City* end, uint32_t max_path_len)
 {
-    City** path = calloc(max_path_len, sizeof(City*));
+    City** path = (City**)(max_path_len, sizeof(City*));
     if(path == NULL)
     {
         perror("Could not alloc space for path in astar");
@@ -122,8 +336,8 @@ int main()
     #define getCityFromList(a) getCity(a, cities, citiesLen)
     #define addConnection2Way(a, b, c) addConnection(a, b, c);addConnection(b, a, c);
     
-    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Zerind"), 75);
     addConnection2Way(getCityFromList("Arad"),      getCityFromList("Sibiu"), 140);
+    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Zerind"), 75);
     addConnection2Way(getCityFromList("Arad"),      getCityFromList("Timisoara"), 118);
     addConnection2Way(getCityFromList("Zerind"),   getCityFromList("Oradea"), 71);
     addConnection2Way(getCityFromList("Oradea"),    getCityFromList("Sibiu"), 151);
@@ -146,12 +360,14 @@ int main()
     addConnection2Way(getCityFromList("Vaslui"),    getCityFromList("Iasi"), 92);
     addConnection2Way(getCityFromList("Iasi"),      getCityFromList("Neamt"), 87);
 
-    #undef getCityFromList
+    //#undef getCityFromList
     #undef addConnection2Way
     #pragma endregion 
 
-    for(int i = 0; i < citiesLen; i++)
+    City** buf = breadthFirst(getCityFromList("Arad"), getCityFromList("Bucharest"));
+
+    for(int i = 0; i < nullTermArrLen((void**)buf); i++)
     {
-        printf("%s %d\n", cities[i]->name, cities[i]->straight_distance);
+        printf("%s %d\n", buf[i]->name, buf[i]->straight_distance);
     }
 }
