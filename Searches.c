@@ -4,29 +4,43 @@
 #include <string.h>
 #include <stdbool.h>
 
-#pragma region /* A generic singly linked node implementation */
-// 
+#pragma region /* A generic singly linked node implementation + a node implementation with a priority */
 typedef struct node Node;
 typedef struct node{
     void *data;
     Node *next;
 } Node;
 
-Node* createNode(void* data)
+Node* node_createNode(void* data)
 {
     Node* node = (Node*)calloc(1, sizeof(Node));
     node->data = data;
     return node;
 }
+
+typedef struct pnode PNode;
+typedef struct pnode{
+    void *data;
+    PNode *next;
+    uint32_t score;
+} PNode;
+
+PNode* pnode_createNode(void* data, uint32_t score)
+{
+    PNode* node = (PNode*)calloc(1, sizeof(PNode));
+    node->data = data;
+    node->score = score;
+    return node;
+}
 #pragma endregion
 
-#pragma region /* Simple queue implementation */
+#pragma region /* A simple queue implementation */
 typedef struct queue{
     Node* head;
     Node* tail;
 } Queue;
 
-void enqueue(Queue* queue, Node* node)
+void queue_enqueue(Queue* queue, Node* node)
 {
     if(!queue->tail)
     {
@@ -40,7 +54,7 @@ void enqueue(Queue* queue, Node* node)
     } 
 }
 
-Node* dequeue(Queue* queue)
+Node* queue_dequeue(Queue* queue)
 {
     if(queue->head == NULL)return NULL;
 
@@ -52,7 +66,7 @@ Node* dequeue(Queue* queue)
     return temp;
 }
 
-bool inqueue(Queue* queue, void* data)
+bool queue_inqueue(Queue* queue, void* data)
 {
     Node* activeNode = queue->head;
     while(activeNode)
@@ -62,6 +76,91 @@ bool inqueue(Queue* queue, void* data)
     }
     return false;
 }
+#pragma endregion
+
+#pragma region /* A simple queue implementation */
+typedef struct pqueue{
+    PNode* head;
+} PQueue;
+
+void pqueue_enqueue(PQueue* pqueue, PNode* node)
+{
+    PNode** insert_location = &pqueue->head;
+    while(true)
+    {
+        if(*insert_location == NULL || (*insert_location)->score > node->score)
+        {
+            node->next = *insert_location;
+            *insert_location = node;
+            break;
+        }
+        else
+        {
+            insert_location = &((*insert_location)->next);
+        }
+    }
+    return;
+}
+
+PNode* pqueue_dequeue(PQueue* pqueue)
+{
+    PNode *temp = pqueue->head;
+
+    if(temp == NULL)return NULL;
+    pqueue->head = temp->next;
+
+    return temp;
+}
+
+bool pqueue_inqueue(PQueue* pqueue, void* data)
+{
+    PNode* activeNode = pqueue->head;
+    while(activeNode)
+    {
+        if(activeNode->data == data)
+            return true;
+        activeNode = activeNode->next;
+    }
+    return false;
+}
+
+PNode* pqueue_findInQueue(PQueue *pqueue, void* city)
+{
+    PNode* activeNode = pqueue->head;
+    while(activeNode)
+    {
+        if(activeNode->data == city)
+            return activeNode;
+        activeNode = activeNode->next;
+    }
+    return NULL;
+}
+
+PNode** pqueue_findInQueueParent(PQueue *pqueue, void* city)
+{
+    PNode **activeNodePtr = &pqueue->head;
+
+    while(*activeNodePtr != NULL)
+    {
+        if((*activeNodePtr)->data == city)
+            return activeNodePtr;
+        activeNodePtr = &((*activeNodePtr)->next);
+    }
+
+    return NULL;
+}
+
+void pqueue_replaceSpecific(PQueue *pqueue, void* city, uint32_t new_score)
+{
+    PNode** nodeToBeChanged = pqueue_findInQueueParent(pqueue, city);
+    if(nodeToBeChanged == NULL)return;
+
+    PNode* cpy = *nodeToBeChanged;
+    (*nodeToBeChanged) = cpy->next;
+    cpy->score = new_score;
+    pqueue_enqueue(pqueue, cpy);
+}
+
 #pragma endregion
 
 #pragma region /* Simple stack implementation */
@@ -199,7 +298,7 @@ void resetCities(City* cities[], uint32_t arr_size)
 {
     for(int i = 0; i < arr_size; i++)
     {
-        cities[i]->visited.visited = false;
+        cities[i]->visited.addedBy = NULL;
     }
 }
 #pragma endregion
@@ -213,13 +312,13 @@ City** walkBack(City* start, City* end)
 {
     
     Stack stack = {0};
-    push(&stack, createNode(end));
+    push(&stack, node_createNode(end));
 
     // loop until you traced your steps back to the start of the path
     while(end != start)
     {
         // push each visited city onto a stack in reverse order they were visited
-        push(&stack, createNode(end->visited.addedBy));
+        push(&stack, node_createNode(end->visited.addedBy));
         
         // walk backwards along the path to trace it
         end = end->visited.addedBy;
@@ -254,11 +353,11 @@ City** breadthFirst(City* start, City* end)
     Node* currentNode = NULL;
 
     // enque the start city
-    enqueue(&queue, createNode((void*)start));
+    queue_enqueue(&queue, node_createNode((void*)start));
 
     // loop until there are no more cities in the queue
     // (which will only happen if the target cant be found)
-    while(currentNode = dequeue(&queue))
+    while(currentNode = queue_dequeue(&queue))
     {
         City* currentCity = (City*)currentNode->data;
 
@@ -288,7 +387,7 @@ City** breadthFirst(City* start, City* end)
             connected_city->visited.addedBy = currentCity;
 
             // queue the connected city
-            enqueue(&queue, createNode(connected_city));
+            queue_enqueue(&queue, node_createNode(connected_city));
         }
         // free the node we no longer need it once its been dequeued
         free(currentNode);
@@ -306,7 +405,7 @@ City** depthFirst(City* start, City* end)
     Stack stack = {NULL, 0};
     Node* currentNode = NULL;
 
-    push(&stack, createNode((void*)start));
+    push(&stack, node_createNode((void*)start));
 
     // loop until there are no more cities in the stack
     // (which will only happen if the target cant be found)
@@ -340,7 +439,7 @@ City** depthFirst(City* start, City* end)
             connected_city->visited.addedBy = currentCity;
 
             // queue the connected city
-            push(&stack, createNode(connected_city));
+            push(&stack, node_createNode(connected_city));
         }
         // free the node we no longer need it once its been dequeued
         free(currentNode);
@@ -349,12 +448,88 @@ City** depthFirst(City* start, City* end)
     return NULL;
 }
 
-//TODO: Implement
-City* AStar(City* start, City* end)
+/// @brief A* search of a graph
+/// @param start a pointer to the city you wish to start at
+/// @param end a pointer to the city you wish to end at
+/// @return a list of cities in the order of the path found
+City** AStar(City* start, City* end)
 {
+    // Set up a queue structure for the search process
+    PQueue pqueue = {NULL};
+    PNode* currentNode = NULL;
+
+    // enque the start city
+    pqueue_enqueue(&pqueue, pnode_createNode((void*)start, start->straight_distance));
+    start->visited.visited = true;
+
+    // loop until there are no more cities in the queue
+    // (which will only happen if the target cant be found)
+    while(currentNode = pqueue_dequeue(&pqueue))
+    {
+        City* currentCity = (City*)currentNode->data;
+
+        // if we have dequeued the target city from the queue
+        // we have reached our destination and should walk back
+        // through the queueing process to trace our path to the
+        // destination
+        if(currentCity == end) 
+            return walkBack(start, currentCity);
+
+        // we get the number of connections in the current 
+        // cities connections array
+        uint32_t connections_arr_len = \
+            nullTermArrLen((void**)(currentCity)->connections);
+
+        // loop over each connection and queue the connected city
+        for(int i = 0; i < connections_arr_len; i++)
+        {
+            // alias to access the connected city easier
+            City* connected_city = \
+                currentCity->connections[i]->connected_city;
+            
+            // calcuate (possibly new) score for the connected city
+            uint32_t new_score = \
+                currentNode->score - ((City*)currentNode->data)->straight_distance + currentCity->connections[i]->distance + currentCity->straight_distance;
+
+            PNode* temp_node = pqueue_findInQueue(&pqueue, connected_city);
+            if(temp_node != NULL)
+            {
+                if(temp_node->score > new_score)
+                {
+                    //replace the node representing connected_city a node of different score
+                    //and update what city added it
+                    pqueue_replaceSpecific(&pqueue, connected_city, new_score);
+                    connected_city->visited.addedBy = currentCity;
+                }
+            }
+            else
+            {
+                if(connected_city->visited.addedBy != NULL)continue;
+                connected_city->visited.addedBy = currentCity;
+                // queue the connected city
+                pqueue_enqueue(&pqueue, pnode_createNode(connected_city, new_score));
+            }
+        }
+        // free the node we no longer need it once its been dequeued
+        free(currentNode);
+    }
+
     return NULL;
 }
 #pragma endregion
+
+typedef City** Algo(City*, City*);
+void RunAlgo(City* start, City* end, Algo func, City** arr, uint32_t size)
+{
+    City** buf = func(start, end);
+    printf("\n\n%s to %s\n", start->name, end->name);
+    for(int i = 0; i < nullTermArrLen((void**)buf); i++)
+    {
+        printf("%s %d\n", buf[i]->name, buf[i]->straight_distance);
+    }
+    free(buf);
+    resetCities(arr, size);
+}
 
 int main()
 {
@@ -386,38 +561,47 @@ int main()
     #define getCityFromList(a) getCity(a, cities, citiesLen)
     #define addConnection2Way(a, b, c) addConnection(a, b, c);addConnection(b, a, c);
     
-    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Sibiu"), 140);
-    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Zerind"), 75);
-    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Timisoara"), 118);
-    addConnection2Way(getCityFromList("Zerind"),   getCityFromList("Oradea"), 71);
-    addConnection2Way(getCityFromList("Oradea"),    getCityFromList("Sibiu"), 151);
-    addConnection2Way(getCityFromList("Timisoara"), getCityFromList("Lugoj"), 111);
-    addConnection2Way(getCityFromList("Lugoj"),     getCityFromList("Mehadia"), 70);
-    addConnection2Way(getCityFromList("Mehadia"),   getCityFromList("Drobeta"), 75);
-    addConnection2Way(getCityFromList("Drobeta"),   getCityFromList("Craiova"), 120);
+    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Sibiu"),          140);
+    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Zerind"),         75);
+    addConnection2Way(getCityFromList("Arad"),      getCityFromList("Timisoara"),      118);
+    addConnection2Way(getCityFromList("Zerind"),   getCityFromList("Oradea"),          71);
+    addConnection2Way(getCityFromList("Oradea"),    getCityFromList("Sibiu"),          151);
+    addConnection2Way(getCityFromList("Timisoara"), getCityFromList("Lugoj"),          111);
+    addConnection2Way(getCityFromList("Lugoj"),     getCityFromList("Mehadia"),        70);
+    addConnection2Way(getCityFromList("Mehadia"),   getCityFromList("Drobeta"),        75);
+    addConnection2Way(getCityFromList("Drobeta"),   getCityFromList("Craiova"),        120);
     addConnection2Way(getCityFromList("Craiova"),   getCityFromList("Rimnicu Vilcea"), 146);
-    addConnection2Way(getCityFromList("Craiova"),   getCityFromList("Pitesti"), 138);
-    addConnection2Way(getCityFromList("Sibiu"),     getCityFromList("Fagaras"), 99);
+    addConnection2Way(getCityFromList("Craiova"),   getCityFromList("Pitesti"),        138);
+    addConnection2Way(getCityFromList("Sibiu"),     getCityFromList("Fagaras"),        99);
     addConnection2Way(getCityFromList("Sibiu"),     getCityFromList("Rimnicu Vilcea"), 80);
     addConnection2Way(getCityFromList("Pitesti"),   getCityFromList("Rimnicu Vilcea"), 97);
-    addConnection2Way(getCityFromList("Fagaras"),    getCityFromList("Bucharest"), 211);
-    addConnection2Way(getCityFromList("Pitesti"),   getCityFromList("Bucharest"), 101);
-    addConnection2Way(getCityFromList("Giurgiu"),   getCityFromList("Bucharest"), 90);
-    addConnection2Way(getCityFromList("Bucharest"), getCityFromList("Urziceni"), 85);
-    addConnection2Way(getCityFromList("Urziceni"),  getCityFromList("Hirsova"), 98);
-    addConnection2Way(getCityFromList("Urziceni"),  getCityFromList("Vaslui"), 142);
-    addConnection2Way(getCityFromList("Hirsova"),   getCityFromList("Eforie"), 86);
-    addConnection2Way(getCityFromList("Vaslui"),    getCityFromList("Iasi"), 92);
-    addConnection2Way(getCityFromList("Iasi"),      getCityFromList("Neamt"), 87);
+    addConnection2Way(getCityFromList("Fagaras"),    getCityFromList("Bucharest"),     211);
+    addConnection2Way(getCityFromList("Pitesti"),   getCityFromList("Bucharest"),      101);
+    addConnection2Way(getCityFromList("Giurgiu"),   getCityFromList("Bucharest"),      90);
+    addConnection2Way(getCityFromList("Bucharest"), getCityFromList("Urziceni"),       85);
+    addConnection2Way(getCityFromList("Urziceni"),  getCityFromList("Hirsova"),        98);
+    addConnection2Way(getCityFromList("Urziceni"),  getCityFromList("Vaslui"),         142);
+    addConnection2Way(getCityFromList("Hirsova"),   getCityFromList("Eforie"),         86);
+    addConnection2Way(getCityFromList("Vaslui"),    getCityFromList("Iasi"),           92);
+    addConnection2Way(getCityFromList("Iasi"),      getCityFromList("Neamt"),          87);
 
     //#undef getCityFromList
     #undef addConnection2Way
     #pragma endregion 
+    #define RunAlgo(a, b, c) RunAlgo(getCityFromList(a), getCityFromList(b), c, cities, citiesLen)
 
-    City** buf = depthFirst(getCityFromList("Arad"), getCityFromList("Bucharest"));
+    printf("\nBreadth First Paths\n");
+    RunAlgo("Oradea", "Bucharest", breadthFirst);
+    RunAlgo("Timisoara", "Bucharest", breadthFirst);
+    RunAlgo("Neamt", "Bucharest", breadthFirst);
 
-    for(int i = 0; i < nullTermArrLen((void**)buf); i++)
-    {
-        printf("%s %d\n", buf[i]->name, buf[i]->straight_distance);
-    }
+    printf("\nDepth First Paths\n");
+    RunAlgo("Oradea", "Bucharest", depthFirst);
+    RunAlgo("Timisoara", "Bucharest", depthFirst);
+    RunAlgo("Neamt", "Bucharest", depthFirst);
+
+    printf("\nAStar Paths\n");
+    RunAlgo("Oradea", "Bucharest", AStar);
+    RunAlgo("Timisoara", "Bucharest", AStar);
+    RunAlgo("Neamt", "Bucharest", AStar);
 }
