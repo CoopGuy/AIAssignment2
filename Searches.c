@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-//-------------------------
-// A generic singly linked node implementation
+#pragma region /* A generic singly linked node implementation */
+// 
 typedef struct node Node;
 typedef struct node{
     void *data;
@@ -18,11 +18,9 @@ Node* createNode(void* data)
     node->data = data;
     return node;
 }
-//-------------------------
+#pragma endregion
 
-
-//-------------------------
-// Simple queue implementation
+#pragma region /* Simple queue implementation */
 typedef struct queue{
     Node* head;
     Node* tail;
@@ -64,11 +62,9 @@ bool inqueue(Queue* queue, void* data)
     }
     return false;
 }
-//-------------------------
+#pragma endregion
 
-
-//-------------------------
-// simple stack implementation
+#pragma region /* Simple stack implementation */
 typedef struct stack{
     Node* head;
     uint32_t size;
@@ -100,8 +96,9 @@ Node* pop(Stack* stack)
         return temp;
     }
 }
-//-------------------------
+#pragma endregion
 
+#pragma region /* City abstraction structs/implementation */
 typedef struct connection Connection;
 typedef struct city City;
 
@@ -125,6 +122,7 @@ struct city
 
     Connection* connections[5]; // a list of the connections to the city
 };
+
 
 /// @brief adds a connection to a city
 /// @param src_city one of two cities that should be connected
@@ -178,6 +176,9 @@ City* getCity(char* name, City* city_list[], uint32_t list_len)
     exit(1);
 }
 
+#pragma endregion
+
+#pragma region /* Generic utility functions/abstractions */
 /// @brief iterates through an array of pointers and finds the index of the first null pointer
 /// @param arr the array you want to find the length of
 /// @return the length of the array
@@ -190,6 +191,20 @@ uint32_t nullTermArrLen(void *arr[])
     }
 }
 
+/// @brief Since the search functions modify the original cities
+///        this resets those changes
+/// @param cities an array of cities
+/// @param arr_size the size of the cities arr
+void resetCities(City* cities[], uint32_t arr_size)
+{
+    for(int i = 0; i < arr_size; i++)
+    {
+        cities[i]->visited.visited = false;
+    }
+}
+#pragma endregion
+
+#pragma region /* Search algorithm implementations*/
 /// @brief walks cities by their 'addedBy' property to create
 ///        a list of cities representing a path from start to finish
 /// @param end a pointer the the last city in a path
@@ -282,29 +297,64 @@ City** breadthFirst(City* start, City* end)
     return NULL;
 }
 
-//TODO: Implement
-City* depthFirst(City* start, City* end, uint32_t max_path_len)
+/// @brief Depth first search of a graph
+/// @param start a pointer to the city you wish to start at
+/// @param end a pointer to the city you wish to end at
+/// @return a list of cities in the order of the path found
+City** depthFirst(City* start, City* end)
 {
-    City** path = (City**)calloc(max_path_len, sizeof(City*));
-    if(path == NULL)
+    Stack stack = {NULL, 0};
+    Node* currentNode = NULL;
+
+    push(&stack, createNode((void*)start));
+
+    // loop until there are no more cities in the stack
+    // (which will only happen if the target cant be found)
+    while(currentNode = pop(&stack))
     {
-        perror("Could not alloc space for path in depth first");
-        exit(0);
+        City* currentCity = (City*)currentNode->data;
+
+        // if we have dequeued the target city from the queue
+        // we have reached our destination and should walk back
+        // through the queueing process to trace our path to the
+        // destination
+        if(currentCity == end) 
+            return walkBack(start, currentCity);
+
+        // we get the number of connections in the current 
+        // cities connections array
+        uint32_t connections_arr_len = \
+            nullTermArrLen((void**)(currentCity)->connections);
+
+        // loop over each connection and queue the connected city
+        for(int i = 0; i < connections_arr_len; i++)
+        {
+            City* connected_city = \
+                currentCity->connections[i]->connected_city;
+            
+            // if the city to be added is the starting city 
+            // or has already been visited skip it
+            if(connected_city->visited.addedBy != NULL || connected_city == start)continue;
+
+            // set the city as "visited" by storing a reference to the city that added it
+            connected_city->visited.addedBy = currentCity;
+
+            // queue the connected city
+            push(&stack, createNode(connected_city));
+        }
+        // free the node we no longer need it once its been dequeued
+        free(currentNode);
     }
-    path[0] = start;
+
+    return NULL;
 }
 
 //TODO: Implement
-City* AStar(City* start, City* end, uint32_t max_path_len)
+City* AStar(City* start, City* end)
 {
-    City** path = (City**)(max_path_len, sizeof(City*));
-    if(path == NULL)
-    {
-        perror("Could not alloc space for path in astar");
-        exit(0);
-    }
-    path[0] = start;
+    return NULL;
 }
+#pragma endregion
 
 int main()
 {
@@ -364,7 +414,7 @@ int main()
     #undef addConnection2Way
     #pragma endregion 
 
-    City** buf = breadthFirst(getCityFromList("Arad"), getCityFromList("Bucharest"));
+    City** buf = depthFirst(getCityFromList("Arad"), getCityFromList("Bucharest"));
 
     for(int i = 0; i < nullTermArrLen((void**)buf); i++)
     {
